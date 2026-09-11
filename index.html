@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.json">
+<title>月カレンダージェネレーター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sun:#e03030; --sat:#1a5fc8; --wkd:#1a1a1a;
+  --sun-bg:#e03030; --sat-bg:#1a5fc8; --wkd-bg:#1a1a1a;
+  --cell-border:#cccccc; --bg:#f0f0f0; --panel-bg:#ffffff;
+  --accent:#3d7fc8; --font:'Noto Sans JP',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);min-height:100vh;display:flex;flex-direction:column;align-items:center;}
+
+/* ── Control Panel ── */
+#control-panel{
+  background:var(--panel-bg);width:100%;max-width:900px;
+  padding:14px 18px;margin:14px auto 0;border-radius:10px;
+  box-shadow:0 2px 10px rgba(0,0,0,.1);
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+}
+.ctrl-group{display:flex;align-items:center;gap:8px;}
+.ctrl-group label{font-size:13px;color:#555;white-space:nowrap;}
+select{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-family:var(--font);font-size:14px;background:#fff;}
+.btn{padding:7px 16px;border:none;border-radius:6px;font-family:var(--font);font-size:13px;cursor:pointer;font-weight:600;transition:opacity .15s;}
+.btn:hover{opacity:.85;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-print{background:#2a9d2a;color:#fff;}
+.btn-danger{background:#cc3333;color:#fff;font-size:12px;padding:5px 10px;}
+.btn-sm{padding:4px 10px;font-size:12px;}
+.btn-cancel{background:#eee;color:#555;}
+
+/* ── Bulk Bar ── */
+#bulk-bar{
+  display:none;position:sticky;top:0;z-index:200;
+  width:100%;max-width:900px;margin:0 auto;
+  background:#1a1a2e;border-radius:0 0 10px 10px;
+  padding:10px 16px;align-items:center;gap:10px;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);
+}
+#bulk-bar.active{display:flex;}
+.bulk-badge{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);border-radius:6px;padding:4px 10px;flex-shrink:0;}
+.bulk-dot{width:12px;height:12px;border-radius:3px;flex-shrink:0;}
+.bulk-name{font-size:13px;color:#fff;font-weight:600;white-space:nowrap;}
+.bulk-count{font-size:13px;color:rgba(255,255,255,.7);flex:1;white-space:nowrap;}
+.btn-bulk-set{background:#f0a500;color:#1a1a1a;font-weight:700;padding:7px 16px;font-size:13px;border-radius:6px;border:none;cursor:pointer;flex-shrink:0;font-family:var(--font);}
+.btn-bulk-set:disabled{opacity:.4;cursor:default;}
+.btn-bulk-cancel{background:rgba(255,255,255,.15);color:#fff;font-size:12px;padding:6px 12px;border-radius:6px;border:none;cursor:pointer;flex-shrink:0;font-family:var(--font);}
+
+/* ── Preset Panel ── */
+#preset-panel{
+  background:var(--panel-bg);width:100%;max-width:900px;
+  margin:10px auto 0;border-radius:10px;
+  box-shadow:0 2px 10px rgba(0,0,0,.1);overflow:hidden;
+}
+
+/* Tab bar */
+.tab-bar{
+  display:flex;align-items:stretch;background:#f0f0f0;
+  border-bottom:2px solid #ddd;overflow-x:auto;
+  scrollbar-width:none;
+}
+.tab-bar::-webkit-scrollbar{display:none;}
+.tab-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:9px 14px;font-size:13px;font-family:var(--font);
+  border:none;background:transparent;cursor:pointer;
+  white-space:nowrap;color:#666;border-bottom:2px solid transparent;
+  margin-bottom:-2px;transition:color .15s;flex-shrink:0;
+}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);background:#fff;font-weight:700;}
+.tab-btn:hover:not(.active){color:#333;background:#e8e8e8;}
+.tab-add-btn{
+  padding:8px 12px;font-size:18px;line-height:1;
+  border:none;background:transparent;cursor:pointer;color:#888;flex-shrink:0;
+}
+.tab-add-btn:hover{color:#333;}
+
+/* Preset content */
+.tab-content{padding:12px 16px 14px;}
+.tab-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.tab-title-label{font-size:12px;color:#777;flex:1;}
+
+.preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;}
+.preset-item{
+  display:flex;align-items:center;gap:6px;
+  background:#f8f8f8;border:1.5px solid #ddd;border-radius:7px;
+  padding:6px 9px;cursor:pointer;user-select:none;
+  transition:box-shadow .15s,border-color .15s;
+}
+.preset-item:hover{box-shadow:0 0 0 2px var(--accent);border-color:var(--accent);}
+.preset-item.bulk-active{box-shadow:0 0 0 2px #f0a500;border-color:#f0a500;background:#fff8e8;}
+.preset-item.empty-slot{opacity:.5;cursor:default;}
+.preset-item.empty-slot:hover{box-shadow:none;border-color:#ddd;}
+.preset-dot{width:13px;height:13px;border-radius:3px;flex-shrink:0;border:1px solid rgba(0,0,0,.12);}
+.preset-label{font-size:12px;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
+.preset-edit-btn{
+  font-size:11px;color:#aaa;background:none;border:none;cursor:pointer;
+  padding:1px 3px;border-radius:3px;flex-shrink:0;
+}
+.preset-edit-btn:hover{background:#e0e0e0;color:#555;}
+
+/* ── Modals ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;}
+.modal-overlay.active{display:flex;}
+.modal{background:#fff;border-radius:12px;padding:22px;width:360px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2);}
+.modal h2{font-size:15px;margin-bottom:14px;color:#222;}
+.modal-section{margin-bottom:12px;}
+.modal-section label{display:block;font-size:12px;color:#666;margin-bottom:4px;}
+.modal-section input[type="text"]{width:100%;padding:7px 10px;font-size:14px;border:1px solid #ccc;border-radius:6px;font-family:var(--font);}
+.color-swatches{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.swatch{width:26px;height:26px;border-radius:5px;cursor:pointer;border:2px solid transparent;transition:transform .1s;}
+.swatch:hover{transform:scale(1.1);}
+.swatch.selected{border-color:#333;}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
+
+/* Tab name modal */
+.tab-name-modal{width:300px;}
+
+/* Day modal */
+.day-modal{width:320px;max-height:90vh;overflow-y:auto;}
+.schedule-assign-list{display:flex;flex-direction:column;gap:5px;max-height:50vh;overflow-y:auto;margin-bottom:10px;}
+.assign-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #e0e0e0;border-radius:6px;cursor:pointer;font-size:13px;color:#333;transition:background .1s;}
+.assign-row:hover{background:#f5f5f5;}
+.assign-row.active{background:#e8f0ff;border-color:var(--accent);}
+.assign-dot{width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.12);flex-shrink:0;}
+.assign-tab-label{font-size:10px;color:#999;margin-left:2px;}
+
+/* Manage section */
+#manage-section{background:var(--panel-bg);width:100%;max-width:900px;margin:0 auto 0;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1);overflow:hidden;display:none;}
+#manage-section.open{display:block;}
+.manage-header{background:#3d3d3d;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;}
+.manage-body{padding:12px 16px;display:flex;flex-direction:column;gap:6px;}
+.manage-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid #e0e0e0;border-radius:8px;background:#fafafa;}
+.manage-num{font-size:12px;color:#999;width:18px;text-align:center;flex-shrink:0;}
+.manage-dot{width:15px;height:15px;border-radius:4px;border:1px solid rgba(0,0,0,.12);flex-shrink:0;}
+.manage-name{flex:1;font-size:13px;color:#333;font-weight:500;}
+.manage-empty-label{flex:1;font-size:12px;color:#aaa;font-style:italic;}
+
+/* ── Calendar ── */
+#calendar-wrapper{width:100%;max-width:900px;margin:12px auto 30px;background:#fff;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1);overflow:hidden;}
+#calendar-area{width:100%;padding:16px 18px 18px;}
+
+.cal-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;}
+.mini-cal{width:138px;font-size:9px;}
+.mini-cal-title{font-size:10px;font-weight:700;text-align:center;margin-bottom:3px;color:#333;}
+.mini-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center;}
+.mini-cal-header{font-weight:700;padding:1px 0;font-size:8.5px;}
+.mini-cal-header.sun{color:var(--sun);}
+.mini-cal-header.sat{color:var(--sat);}
+.mini-day{padding:1px 0;font-size:8.5px;line-height:1.4;color:#333;}
+.mini-day.sun{color:var(--sun);} .mini-day.sat{color:var(--sat);} .mini-day.holiday{color:var(--sun);}
+.cal-title-block{text-align:center;flex:1;padding:0 14px;}
+.cal-year{font-size:21px;font-weight:400;color:#1a1a1a;}
+.cal-month{font-size:56px;font-weight:900;color:#1a1a1a;line-height:1;}
+.cal-month-label{font-size:19px;font-weight:700;color:#1a1a1a;}
+
+.cal-grid{width:100%;border-collapse:collapse;table-layout:fixed;}
+.cal-grid th{text-align:center;padding:5px 4px;font-size:13px;font-weight:700;color:#fff;border:1px solid #999;}
+.cal-grid th.sun{background:var(--sun-bg);} .cal-grid th.sat{background:var(--sat-bg);} .cal-grid th.wkd{background:var(--wkd-bg);}
+.cal-grid td{border:1px solid var(--cell-border);vertical-align:top;padding:4px 5px 3px;height:82px;position:relative;cursor:pointer;transition:background .1s;}
+.cal-grid td:hover{background:#f5f8ff;}
+.cal-grid td.empty{background:#fafafa;cursor:default;}
+.cal-grid td.empty:hover{background:#fafafa;}
+.cal-grid td.bulk-selected{background:#ddeeff!important;outline:2px solid var(--accent);outline-offset:-2px;}
+.cal-grid td.bulk-selected::after{content:'✓';position:absolute;top:3px;right:5px;font-size:13px;color:var(--accent);font-weight:700;}
+
+.day-num{font-size:14px;font-weight:700;line-height:1;display:block;margin-bottom:1px;}
+.day-num.sun{color:var(--sun);} .day-num.sat{color:var(--sat);} .day-num.wkd{color:var(--wkd);}
+.holiday-name{font-size:7.5px;color:var(--sun);display:block;line-height:1.2;margin-bottom:1px;}
+.cell-schedules{display:flex;flex-direction:column;gap:2px;margin-top:2px;}
+.cell-event{font-size:9px;padding:1px 4px;border-radius:2px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#222;font-weight:600;}
+
+/* ── Print ── */
+@media print{
+  @page{size:A4 portrait;margin:10mm;}
+  body{background:#fff;}
+  #control-panel,#preset-panel,#bulk-bar,#manage-section{display:none!important;}
+  #calendar-wrapper{box-shadow:none;border-radius:0;max-width:none;width:100%;margin:0;}
+  #calendar-area{padding:6px 8px 8px;}
+  .cal-grid td{height:98px;cursor:default;}
+  .cal-grid td:hover{background:#fff!important;}
+  .modal-overlay{display:none!important;}
+}
+</style>
+</head>
+<body>
+
+<!-- Control Panel -->
+<div id="control-panel">
+  <div class="ctrl-group">
+    <label>年</label><select id="sel-year"></select>
+    <label>月</label><select id="sel-month"></select>
+    <button class="btn btn-primary" onclick="renderCalendar()">カレンダー生成</button>
+  </div>
+  <div class="ctrl-group">
+    <button class="btn btn-sm" style="background:#e8e8e8;color:#444" onclick="toggleManage()">⚙ 予定管理</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+  </div>
+</div>
+
+<!-- Bulk Bar -->
+<div id="bulk-bar">
+  <div class="bulk-badge">
+    <div class="bulk-dot" id="bulk-dot"></div>
+    <span class="bulk-name" id="bulk-name"></span>
+  </div>
+  <span class="bulk-count" id="bulk-count">0日選択中</span>
+  <button class="btn-bulk-set" id="bulk-set-btn" onclick="applyBulk()" disabled>設定</button>
+  <button class="btn-bulk-cancel" onclick="cancelBulk()">✕ キャンセル</button>
+</div>
+
+<!-- Preset Panel with Tabs -->
+<div id="preset-panel">
+  <div class="tab-bar" id="tab-bar"></div>
+  <div class="tab-content">
+    <div class="tab-toolbar">
+      <span class="tab-title-label">📌 タップで一括登録モードON → 日付を複数選択 → 「設定」　　✏ ボタンで各予定を編集</span>
+    </div>
+    <div class="preset-grid" id="preset-grid"></div>
+  </div>
+</div>
+
+<!-- Manage Section -->
+<div id="manage-section">
+  <div class="manage-header">
+    <span>⚙ 予定管理</span>
+    <button class="btn btn-sm" style="background:#888;color:#fff" onclick="toggleManage()">✕ 閉じる</button>
+  </div>
+  <div class="manage-body" id="manage-body"></div>
+</div>
+
+<!-- Calendar -->
+<div id="calendar-wrapper"><div id="calendar-area"></div></div>
+
+<!-- Preset Edit Modal -->
+<div class="modal-overlay" id="preset-modal">
+  <div class="modal">
+    <h2 id="preset-modal-title">予定を編集</h2>
+    <div class="modal-section">
+      <label>予定テキスト</label>
+      <input type="text" id="preset-text-input" placeholder="例: 音楽堂(14:30)" maxlength="20">
+    </div>
+    <div class="modal-section">
+      <label>色</label>
+      <div class="color-swatches" id="color-swatches"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-cancel" onclick="closePresetModal()">キャンセル</button>
+      <button class="btn btn-danger btn-sm" onclick="clearPresetSlot()">クリア</button>
+      <button class="btn btn-primary" onclick="savePreset()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tab Name Modal -->
+<div class="modal-overlay" id="tab-name-modal">
+  <div class="modal tab-name-modal">
+    <h2 id="tab-name-modal-title">タブ名を設定</h2>
+    <div class="modal-section">
+      <label>タブ名</label>
+      <input type="text" id="tab-name-input" placeholder="例: 子供の予定" maxlength="12">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-cancel" onclick="closeTabNameModal()">キャンセル</button>
+      <button class="btn btn-danger btn-sm" id="tab-delete-btn" onclick="deleteCurrentTab()">タブ削除</button>
+      <button class="btn btn-primary" onclick="saveTabName()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Day Modal -->
+<div class="modal-overlay" id="day-modal">
+  <div class="modal day-modal">
+    <h2 id="day-modal-title">予定を設定</h2>
+    <div class="schedule-assign-list" id="schedule-assign-list"></div>
+    <div class="modal-btns">
+      <button class="btn btn-cancel" onclick="closeDayModal()">閉じる</button>
+      <button class="btn btn-danger btn-sm" onclick="clearDaySchedules()">この日をクリア</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== Constants ====================
+const MAX_PRESETS  = 10;
+const MAX_TABS     = 6;
+const COLORS = [
+  {name:'ピンク',   hex:'#ffb3c6'},{name:'ブルー',   hex:'#aad4f5'},
+  {name:'グリーン', hex:'#b2e5b2'},{name:'イエロー', hex:'#fff0a0'},
+  {name:'オレンジ', hex:'#ffd5a0'},{name:'パープル', hex:'#d8b4fe'},
+  {name:'ミント',   hex:'#a7f3d0'},{name:'ピーチ',   hex:'#fed7aa'},
+  {name:'レッド',   hex:'#fca5a5'},{name:'グレー',   hex:'#e0e0e0'},
+];
+
+const HOLIDAYS = {
+  '2024-01-01':'元日','2024-01-08':'成人の日','2024-02-11':'建国記念の日','2024-02-12':'振替休日',
+  '2024-02-23':'天皇誕生日','2024-03-20':'春分の日','2024-04-29':'昭和の日','2024-05-03':'憲法記念日',
+  '2024-05-04':'みどりの日','2024-05-05':'こどもの日','2024-05-06':'振替休日','2024-07-15':'海の日',
+  '2024-08-11':'山の日','2024-08-12':'振替休日','2024-09-16':'敬老の日','2024-09-22':'秋分の日',
+  '2024-09-23':'振替休日','2024-10-14':'スポーツの日','2024-11-03':'文化の日','2024-11-04':'振替休日',
+  '2024-11-23':'勤労感謝の日',
+  '2025-01-01':'元日','2025-01-13':'成人の日','2025-02-11':'建国記念の日','2025-02-23':'天皇誕生日',
+  '2025-02-24':'振替休日','2025-03-20':'春分の日','2025-04-29':'昭和の日','2025-05-03':'憲法記念日',
+  '2025-05-04':'みどりの日','2025-05-05':'こどもの日','2025-05-06':'振替休日','2025-07-21':'海の日',
+  '2025-08-11':'山の日','2025-09-15':'敬老の日','2025-09-23':'秋分の日','2025-10-13':'スポーツの日',
+  '2025-11-03':'文化の日','2025-11-23':'勤労感謝の日','2025-11-24':'振替休日',
+  '2026-01-01':'元日','2026-01-12':'成人の日','2026-02-11':'建国記念の日','2026-02-23':'天皇誕生日',
+  '2026-03-20':'春分の日','2026-04-29':'昭和の日','2026-05-03':'憲法記念日',
+  '2026-05-04':'みどりの日','2026-05-05':'こどもの日','2026-05-06':'振替休日','2026-07-20':'海の日',
+  '2026-08-11':'山の日','2026-09-21':'敬老の日','2026-09-23':'秋分の日','2026-10-12':'スポーツの日',
+  '2026-11-03':'文化の日','2026-11-23':'勤労感謝の日',
+  '2027-01-01':'元日','2027-01-11':'成人の日','2027-02-11':'建国記念の日','2027-02-23':'天皇誕生日',
+  '2027-03-21':'春分の日','2027-04-29':'昭和の日','2027-05-03':'憲法記念日',
+  '2027-05-04':'みどりの日','2027-05-05':'こどもの日','2027-07-19':'海の日',
+  '2027-08-11':'山の日','2027-09-20':'敬老の日','2027-09-23':'秋分の日','2027-10-11':'スポーツの日',
+  '2027-11-03':'文化の日','2027-11-23':'勤労感謝の日',
+};
+
+function dateKey(y,m,d){return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+function isHoliday(y,m,d){return HOLIDAYS[dateKey(y,m,d)]||null;}
+
+// ==================== Storage: Tabs ====================
+// Structure: [{id, name, presets:[{text,colorIdx}|null x10]}, ...]
+function loadTabs(){
+  try{
+    const raw = localStorage.getItem('cal_tabs');
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  // migrate old presets
+  const old = (() => { try{ return JSON.parse(localStorage.getItem('cal_presets')||'[]'); }catch(e){return [];} })();
+  const presets = Array(MAX_PRESETS).fill(null);
+  old.forEach((p,i)=>{ if(i<MAX_PRESETS && p && p.text) presets[i]=p; });
+  return [{id:genId(), name:'予定1', presets}];
+}
+function saveTabs(tabs){ localStorage.setItem('cal_tabs', JSON.stringify(tabs)); }
+function genId(){ return Math.random().toString(36).slice(2,9); }
+
+// schedules: { "tabId_YYYY-MM-DD": [slotIdx,...] }
+function loadSchedules(){ try{ return JSON.parse(localStorage.getItem('cal_schedules2')||'{}'); }catch(e){return {};} }
+function saveSchedules(s){ localStorage.setItem('cal_schedules2', JSON.stringify(s)); }
+function schedKey(tabId, dk){ return `${tabId}_${dk}`; }
+
+// ==================== State ====================
+let tabs = [];
+let activeTabIdx = 0;
+let currentYear, currentMonth;
+let editingTabIdx = -1;
+let editingSlotIdx = 0;
+let selectedColor = 0;
+let bulkMode = false;
+let bulkTabId = '';
+let bulkSlotIdx = -1;
+let bulkSelected = new Set();
+let currentDayKey = '';
+
+// ==================== Init ====================
+function initSelectors(){
+  const sy = document.getElementById('sel-year');
+  const sm = document.getElementById('sel-month');
+  const now = new Date();
+  for(let y=2024;y<=2028;y++){
+    const o=document.createElement('option');
+    o.value=y; o.textContent=y+'年';
+    if(y===now.getFullYear()) o.selected=true;
+    sy.appendChild(o);
+  }
+  for(let m=1;m<=12;m++){
+    const o=document.createElement('option');
+    o.value=m; o.textContent=m+'月';
+    if(m===now.getMonth()+1) o.selected=true;
+    sm.appendChild(o);
+  }
+}
+
+// ==================== Tab UI ====================
+function renderTabBar(){
+  const bar = document.getElementById('tab-bar');
+  bar.innerHTML = '';
+  tabs.forEach((tab, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (i===activeTabIdx?' active':'');
+    btn.innerHTML = `<span>${tab.name}</span><span style="font-size:10px;color:#aaa;margin-left:2px" onclick="openTabNameModal(${i},event)">✏</span>`;
+    btn.onclick = (e) => { if(!e.target.onclick) switchTab(i); };
+    // ✏ click handled inline above
+    bar.appendChild(btn);
+  });
+  if(tabs.length < MAX_TABS){
+    const add = document.createElement('button');
+    add.className = 'tab-add-btn';
+    add.textContent = '+';
+    add.title = 'タブを追加';
+    add.onclick = addTab;
+    bar.appendChild(add);
+  }
+}
+
+function switchTab(i){
+  cancelBulk();
+  activeTabIdx = i;
+  renderTabBar();
+  renderPresetGrid();
+}
+
+function addTab(){
+  if(tabs.length >= MAX_TABS) return;
+  tabs.push({id:genId(), name:`予定${tabs.length+1}`, presets:Array(MAX_PRESETS).fill(null)});
+  saveTabs(tabs);
+  activeTabIdx = tabs.length - 1;
+  renderTabBar();
+  renderPresetGrid();
+}
+
+function openTabNameModal(i, e){
+  if(e) e.stopPropagation();
+  editingTabIdx = i;
+  document.getElementById('tab-name-input').value = tabs[i].name;
+  document.getElementById('tab-name-modal-title').textContent = 'タブ名を変更';
+  document.getElementById('tab-delete-btn').style.display = tabs.length > 1 ? '' : 'none';
+  document.getElementById('tab-name-modal').classList.add('active');
+}
+
+function closeTabNameModal(){
+  document.getElementById('tab-name-modal').classList.remove('active');
+}
+
+function saveTabName(){
+  const name = document.getElementById('tab-name-input').value.trim();
+  if(!name) return;
+  tabs[editingTabIdx].name = name;
+  saveTabs(tabs);
+  closeTabNameModal();
+  renderTabBar();
+}
+
+function deleteCurrentTab(){
+  if(tabs.length <= 1){ alert('最後のタブは削除できません。'); return; }
+  if(!confirm(`タブ「${tabs[editingTabIdx].name}」を削除しますか？\n（このタブの予定データも削除されます）`)) return;
+  // remove schedules for this tab
+  const tid = tabs[editingTabIdx].id;
+  const sch = loadSchedules();
+  Object.keys(sch).forEach(k=>{ if(k.startsWith(tid+'_')) delete sch[k]; });
+  saveSchedules(sch);
+  tabs.splice(editingTabIdx, 1);
+  saveTabs(tabs);
+  activeTabIdx = Math.min(activeTabIdx, tabs.length-1);
+  closeTabNameModal();
+  renderTabBar();
+  renderPresetGrid();
+  renderCalendar();
+}
+
+// ==================== Preset Grid ====================
+function renderPresetGrid(){
+  const tab = tabs[activeTabIdx];
+  const grid = document.getElementById('preset-grid');
+  grid.innerHTML = '';
+  for(let i=0;i<MAX_PRESETS;i++){
+    const p = tab.presets[i];
+    const hasData = p && p.text;
+    const color = hasData ? (COLORS[p.colorIdx]?.hex||'#eee') : '#e8e8e8';
+    const isBulkActive = bulkMode && bulkTabId===tab.id && bulkSlotIdx===i;
+    const classes = ['preset-item', !hasData?'empty-slot':'', isBulkActive?'bulk-active':''].filter(Boolean).join(' ');
+    const item = document.createElement('div');
+    item.className = classes;
+    item.id = `pitem-${i}`;
+    item.innerHTML = `
+      <div class="preset-dot" style="background:${color}"></div>
+      <span class="preset-label">${hasData ? p.text : '（未設定）'}</span>
+      <button class="preset-edit-btn" onclick="openPresetModal(${i},event)">✏</button>
+    `;
+    if(hasData){
+      item.onclick = (e) => { if(!e.target.classList.contains('preset-edit-btn')) enterBulkMode(i); };
+    }
+    grid.appendChild(item);
+  }
+}
+
+// ==================== Preset Edit Modal ====================
+function openPresetModal(slotIdx, e){
+  if(e) e.stopPropagation();
+  editingSlotIdx = slotIdx;
+  const tab = tabs[activeTabIdx];
+  const p = tab.presets[slotIdx];
+  document.getElementById('preset-modal-title').textContent = `予定${slotIdx+1}を編集（${tab.name}）`;
+  document.getElementById('preset-text-input').value = p?.text||'';
+  selectedColor = p?.colorIdx ?? 0;
+  renderColorSwatches();
+  document.getElementById('preset-modal').classList.add('active');
+}
+
+function closePresetModal(){ document.getElementById('preset-modal').classList.remove('active'); }
+
+function renderColorSwatches(){
+  const sw = document.getElementById('color-swatches');
+  sw.innerHTML = '';
+  COLORS.forEach((c,i)=>{
+    const d = document.createElement('div');
+    d.className = 'swatch'+(i===selectedColor?' selected':'');
+    d.style.background = c.hex;
+    d.title = c.name;
+    d.onclick = ()=>pickColor(i);
+    sw.appendChild(d);
+  });
+}
+
+function pickColor(i){ selectedColor=i; renderColorSwatches(); }
+
+function savePreset(){
+  const text = document.getElementById('preset-text-input').value.trim();
+  tabs[activeTabIdx].presets[editingSlotIdx] = text ? {text, colorIdx:selectedColor} : null;
+  saveTabs(tabs);
+  closePresetModal();
+  renderPresetGrid();
+  renderManageBody();
+  renderCalendar();
+}
+
+function clearPresetSlot(){
+  tabs[activeTabIdx].presets[editingSlotIdx] = null;
+  saveTabs(tabs);
+  closePresetModal();
+  renderPresetGrid();
+  renderManageBody();
+  renderCalendar();
+}
+
+// ==================== Manage Section ====================
+function toggleManage(){
+  const sec = document.getElementById('manage-section');
+  const isOpen = sec.classList.toggle('open');
+  if(isOpen) renderManageBody();
+}
+
+function renderManageBody(){
+  const body = document.getElementById('manage-body');
+  body.innerHTML = '';
+  tabs.forEach((tab, ti) => {
+    const header = document.createElement('div');
+    header.style.cssText = 'font-size:12px;font-weight:700;color:#555;margin:8px 0 4px;padding:0 2px;';
+    header.textContent = `▸ ${tab.name}`;
+    body.appendChild(header);
+    for(let i=0;i<MAX_PRESETS;i++){
+      const p = tab.presets[i];
+      const hasData = p && p.text;
+      const color = hasData ? (COLORS[p.colorIdx]?.hex||'#eee') : '#eee';
+      const row = document.createElement('div');
+      row.className = 'manage-row';
+      row.innerHTML = `
+        <span class="manage-num">${i+1}</span>
+        <div class="manage-dot" style="background:${color}"></div>
+        ${hasData ? `<span class="manage-name">${p.text}</span>` : `<span class="manage-empty-label">（未設定）</span>`}
+        <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="switchTabAndEdit(${ti},${i})">編集</button>
+      `;
+      body.appendChild(row);
+    }
+  });
+}
+
+function switchTabAndEdit(ti, slotIdx){
+  activeTabIdx = ti;
+  renderTabBar();
+  renderPresetGrid();
+  openPresetModal(slotIdx);
+}
+
+// ==================== Bulk Mode ====================
+function enterBulkMode(slotIdx){
+  const tab = tabs[activeTabIdx];
+  const p = tab.presets[slotIdx];
+  if(!p || !p.text) return;
+  bulkMode    = true;
+  bulkTabId   = tab.id;
+  bulkSlotIdx = slotIdx;
+  bulkSelected= new Set();
+  const color = COLORS[p.colorIdx]?.hex||'#eee';
+  document.getElementById('bulk-dot').style.background = color;
+  document.getElementById('bulk-name').textContent = p.text;
+  document.getElementById('bulk-bar').classList.add('active');
+  updateBulkCount();
+  renderPresetGrid();
+}
+
+function updateBulkCount(){
+  const n = bulkSelected.size;
+  document.getElementById('bulk-count').textContent = `${n}日選択中`;
+  document.getElementById('bulk-set-btn').disabled = n===0;
+}
+
+function handleCellClick(e, dk, year, month, day){
+  if(bulkMode){
+    const td = e.currentTarget;
+    if(bulkSelected.has(dk)){ bulkSelected.delete(dk); td.classList.remove('bulk-selected'); }
+    else                     { bulkSelected.add(dk);   td.classList.add('bulk-selected'); }
+    updateBulkCount();
+  } else {
+    openDayModal(year, month, day);
+  }
+}
+
+function applyBulk(){
+  if(!bulkMode || bulkSlotIdx<0 || bulkSelected.size===0) return;
+  const sch = loadSchedules();
+  for(const dk of bulkSelected){
+    const k = schedKey(bulkTabId, dk);
+    const slots = sch[k]||[];
+    if(!slots.includes(bulkSlotIdx)) slots.push(bulkSlotIdx);
+    sch[k] = slots;
+  }
+  saveSchedules(sch);
+  for(const dk of bulkSelected) refreshCell(dk);
+  cancelBulk();
+}
+
+function cancelBulk(){
+  bulkMode=false; bulkTabId=''; bulkSlotIdx=-1;
+  document.querySelectorAll('.cal-grid td.bulk-selected').forEach(td=>td.classList.remove('bulk-selected'));
+  bulkSelected=new Set();
+  document.getElementById('bulk-bar').classList.remove('active');
+  renderPresetGrid();
+}
+
+// ==================== Day Modal ====================
+function openDayModal(year, month, day){
+  currentDayKey = dateKey(year, month, day);
+  const sch = loadSchedules();
+  const hasAnyPreset = tabs.some(t=>t.presets.some(p=>p&&p.text));
+  if(!hasAnyPreset){ alert('先に予定プリセットを登録してください。'); return; }
+  document.getElementById('day-modal-title').textContent = `${year}年${month}月${day}日の予定`;
+  const list = document.getElementById('schedule-assign-list');
+  list.innerHTML = '';
+  tabs.forEach(tab => {
+    tab.presets.forEach((p, si) => {
+      if(!p || !p.text) return;
+      const k = schedKey(tab.id, currentDayKey);
+      const slots = sch[k]||[];
+      const isActive = slots.includes(si);
+      const color = COLORS[p.colorIdx]?.hex||'#eee';
+      const row = document.createElement('div');
+      row.className = 'assign-row'+(isActive?' active':'');
+      row.id = `arow-${tab.id}-${si}`;
+      row.innerHTML = `
+        <div class="assign-dot" style="background:${color}"></div>
+        <span>${p.text}</span>
+        <span class="assign-tab-label">[${tab.name}]</span>
+        <span style="margin-left:auto;font-size:11px;color:${isActive?'#3d7fc8':'#aaa'}">${isActive?'✓ ON':'OFF'}</span>
+      `;
+      row.onclick = () => toggleDaySchedule(tab.id, si, row);
+      list.appendChild(row);
+    });
+  });
+  document.getElementById('day-modal').classList.add('active');
+}
+
+function toggleDaySchedule(tabId, slotIdx, row){
+  const sch = loadSchedules();
+  const k = schedKey(tabId, currentDayKey);
+  const slots = sch[k]||[];
+  const idx = slots.indexOf(slotIdx);
+  if(idx>=0) slots.splice(idx,1); else slots.push(slotIdx);
+  sch[k] = slots;
+  saveSchedules(sch);
+  const isActive = slots.includes(slotIdx);
+  row.classList.toggle('active', isActive);
+  row.querySelector('span:last-child').textContent = isActive?'✓ ON':'OFF';
+  row.querySelector('span:last-child').style.color = isActive?'#3d7fc8':'#aaa';
+  refreshCell(currentDayKey);
+}
+
+function clearDaySchedules(){
+  const sch = loadSchedules();
+  tabs.forEach(tab => { delete sch[schedKey(tab.id, currentDayKey)]; });
+  saveSchedules(sch);
+  closeDayModal();
+  refreshCell(currentDayKey);
+}
+
+function closeDayModal(){ document.getElementById('day-modal').classList.remove('active'); }
+
+function refreshCell(dk){
+  const td = document.querySelector(`td[data-date="${dk}"]`);
+  if(!td) return;
+  let evEl = td.querySelector('.cell-schedules');
+  if(!evEl){ evEl=document.createElement('div'); evEl.className='cell-schedules'; td.appendChild(evEl); }
+  evEl.innerHTML='';
+  const sch = loadSchedules();
+  tabs.forEach(tab => {
+    const k = schedKey(tab.id, dk);
+    const slots = sch[k]||[];
+    slots.forEach(si => {
+      const p = tab.presets[si];
+      if(p && p.text){
+        const ev = document.createElement('div');
+        ev.className='cell-event';
+        ev.style.background = COLORS[p.colorIdx]?.hex||'#eee';
+        ev.textContent = p.text;
+        evEl.appendChild(ev);
+      }
+    });
+  });
+}
+
+// ==================== Calendar ====================
+function renderCalendar(){
+  currentYear  = parseInt(document.getElementById('sel-year').value);
+  currentMonth = parseInt(document.getElementById('sel-month').value);
+  document.getElementById('calendar-area').innerHTML = buildCalendarHTML(currentYear, currentMonth);
+}
+
+function buildCalendarHTML(year, month){
+  const pM=month===1?12:month-1, pY=month===1?year-1:year;
+  const nM=month===12?1:month+1, nY=month===12?year+1:year;
+  return `
+  <div class="cal-top">
+    <div class="mini-cal">${buildMiniCal(pY,pM)}</div>
+    <div class="cal-title-block">
+      <div class="cal-year">${year}</div>
+      <div><span class="cal-month">${month}</span><span class="cal-month-label">月</span></div>
+    </div>
+    <div class="mini-cal">${buildMiniCal(nY,nM)}</div>
+  </div>
+  ${buildMainGrid(year,month)}`;
+}
+
+function buildMiniCal(year,month){
+  const days=['日','月','火','水','木','金','土'];
+  let h=`<div class="mini-cal-title">${year}年 ${month}月</div><div class="mini-cal-grid">`;
+  for(let i=0;i<7;i++) h+=`<div class="mini-cal-header ${i===0?'sun':i===6?'sat':''}">${days[i]}</div>`;
+  const first=new Date(year,month-1,1).getDay(), last=new Date(year,month,0).getDate();
+  for(let i=0;i<first;i++) h+=`<div class="mini-day" style="color:transparent">0</div>`;
+  for(let d=1;d<=last;d++){
+    const dow=(first+d-1)%7, hol=isHoliday(year,month,d);
+    h+=`<div class="mini-day ${hol||dow===0?'sun':dow===6?'sat':''}">${d}</div>`;
+  }
+  return h+'</div>';
+}
+
+function buildMainGrid(year,month){
+  const DOW=['日','月','火','水','木','金','土'];
+  const sch=loadSchedules(), first=new Date(year,month-1,1).getDay(), last=new Date(year,month,0).getDate();
+  let h='<table class="cal-grid"><thead><tr>';
+  for(let i=0;i<7;i++) h+=`<th class="${i===0?'sun':i===6?'sat':'wkd'}">${DOW[i]}</th>`;
+  h+='</tr></thead><tbody><tr>';
+  for(let i=0;i<first;i++) h+='<td class="empty"></td>';
+  let col=first;
+  for(let d=1;d<=last;d++){
+    const dow=col%7, hol=isHoliday(year,month,d), dk=dateKey(year,month,d);
+    const numCls=hol||dow===0?'sun':dow===6?'sat':'wkd';
+    // events from all tabs
+    let evHtml='';
+    const evItems=[];
+    tabs.forEach(tab=>{
+      const k=schedKey(tab.id,dk), slots=sch[k]||[];
+      slots.forEach(si=>{ const p=tab.presets[si]; if(p&&p.text) evItems.push({text:p.text,color:COLORS[p.colorIdx]?.hex||'#eee'}); });
+    });
+    if(evItems.length){
+      evHtml='<div class="cell-schedules">';
+      evItems.forEach(ev=>{ evHtml+=`<div class="cell-event" style="background:${ev.color}">${ev.text}</div>`; });
+      evHtml+='</div>';
+    }
+    h+=`<td onclick="handleCellClick(event,'${dk}',${year},${month},${d})" data-date="${dk}">
+      <span class="day-num ${numCls}">${d}</span>
+      ${hol?`<span class="holiday-name">${hol}</span>`:''}
+      ${evHtml}
+    </td>`;
+    col++;
+    if(col%7===0&&d<last) h+='</tr><tr>';
+  }
+  const rem=(7-col%7)%7;
+  for(let i=0;i<rem;i++) h+='<td class="empty"></td>';
+  return h+'</tr></tbody></table>';
+}
+
+// ==================== Modal overlays ====================
+['preset-modal','tab-name-modal','day-modal'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',function(e){
+    if(e.target===this) this.classList.remove('active');
+  });
+});
+
+// ==================== Boot ====================
+initSelectors();
+tabs = loadTabs();
+renderTabBar();
+renderPresetGrid();
+renderCalendar();
+
+if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+</script>
+</body>
+</html>
